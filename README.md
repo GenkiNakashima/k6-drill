@@ -13,7 +13,7 @@ k6 を初めて使う人が，「こういう状況では k6 のコードをこ�
 
 ### 1. 用意するもの
 
-- 配られた k6ドリルの実行ファイル（または，このフォルダ一式）
+- 配られた k6ドリルの実行ファイル（または，GitHub から取ってきたフォルダ一式）
 - ブラウザ（Chrome，Edge，Safari，Firefox のどれか）
 
 k6 は **入れなくても始められます**．採点は k6 を使いません．あとで「k6 で実行（拡張）」を試したくなったら，[6. k6 を入れる（任意）](#6-k6-を入れる任意) を見てください．
@@ -49,12 +49,31 @@ Mac がどちらかは，アップルメニュー →「この Mac について�
 
 **フォルダ一式から起動する場合**（Go 1.26 以上が必要．入れ方は [7. Go を入れる](#7-go-を入れるフォルダ一式から起動する場合だけ)）
 
+まず，GitHub からフォルダ一式を取ってきます．git を使う方法と，ZIP でダウンロードする方法があります．
+
+- **git を使う**（git の入れ方は [8. git を入れる](#8-git-を入れる任意)）：ターミナル（Windows は PowerShell）で，フォルダを置きたい場所に移動してから実行します．
+
+  ```sh
+  cd ~/Documents     # フォルダを置きたい場所（どこでもよい）
+  git clone https://github.com/GenkiNakashima/k6-drill.git
+  cd k6-drill
+  ```
+
+- **ZIP でダウンロードする**（git がなくてもよい）：https://github.com/GenkiNakashima/k6-drill を開き，緑の「Code」ボタン →「Download ZIP」を押します．ダウンロードした ZIP を展開すると `k6-drill-main` というフォルダができるので，ターミナルでそのフォルダに移動します．
+
+  ```sh
+  cd ~/Downloads/k6-drill-main
+  ```
+
+フォルダに移動したら，起動します．
+
 ```sh
-cd k6-drill
 go run .
 ```
 
 最初の1回だけ，Go が必要な部品（JavaScript の構文解析と YAML の読み込み）をインターネットから取ってくるので，少し時間がかかります．2回目からはオフラインでも起動できます．
+
+**新しい版に更新する**：git で取ってきた場合は，`k6-drill` フォルダで `git pull` を実行してから，もう一度 `go run .` で起動します．ZIP の場合は，ZIP をダウンロードし直してください．どちらの場合も，進捗（ホームフォルダの `.k6-drill`）は消えません．
 
 ### 3. 使う
 
@@ -146,6 +165,18 @@ go version
 ```
 
 `go version go1.26.0 …` のように，1.26 以上の版が出れば入っています．`command not found`（Windows は「認識されません」）と出るときは，ターミナルを開き直すか，PC を再起動してください．
+
+### 8. git を入れる（任意）
+
+git clone でフォルダを取ってくる場合だけ必要です．ZIP でダウンロードするなら要りません．すでに入っているかは，ターミナルで `git --version` を実行すると分かります（`git version 2.…` と出れば入っています）．
+
+| PC | 入れ方 |
+| --- | --- |
+| Mac | ターミナルで `xcode-select --install` を実行し，出てきた画面で「インストール」を押す（Homebrew を使っているなら `brew install git` でもよい） |
+| Windows | PowerShell で `winget install Git.Git`，または https://git-scm.com/downloads からインストーラーを入れる |
+| Ubuntu | `sudo apt install git` |
+
+入れたら，ターミナルを開き直してから `git --version` で確かめてください．
 
 ### フロントエンドについて
 
