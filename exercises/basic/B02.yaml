@@ -1,0 +1,100 @@
+id: B02
+level: basic
+title: VU と実行時間
+scenario: 決まった人数が一定の時間使い続ける状況を作りたい
+minutes: 4
+doc:
+  - https://grafana.com/docs/k6/latest/using-k6/k6-options/
+type: code
+statement: |
+  ## 状況
+
+  5人の利用者が，それぞれ「ページを開いて1秒読む」を10秒間繰り返す状況を作りたい．
+
+  ## やること
+
+  `export const options` を書き，**5 VU で10秒間** 負荷をかけてください．`sleep(1)` は「1秒休む（読む時間）」で，すでに書いてあります．
+
+  ## 書き方の型
+
+  | オプション | 意味 | 書く値 |
+  | --- | --- | --- |
+  | `vus` | 同時に動かす VU（仮想ユーザー）の数 | `5` |
+  | `duration` | テストを続ける時間 | `'10s'` |
+
+  ```
+  export const options = {
+    vus: 5,
+    duration: '10s',
+  };
+  ```
+starter: |
+  import http from 'k6/http';
+  import { sleep } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  // ここに options を書く
+
+  export default function () {
+    http.get(`${BASE_URL}/api/ping`);
+    sleep(1);
+  }
+solution: |
+  import http from 'k6/http';
+  import { sleep } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 5,
+    duration: '10s',
+  };
+
+  export default function () {
+    http.get(`${BASE_URL}/api/ping`);
+    sleep(1);
+  }
+judge:
+  static:
+    options:
+      vus: 5
+      duration: 10s
+    sleep: true
+    requests:
+      - method: GET
+        path: /api/ping
+        in: default
+  run:
+    exit_code: 0
+    requests:
+      - url_contains: /api/ping
+        status: 200
+        min: 20
+hints:
+  - when: { problem: options_not_exported }
+    text: "`const options` の前に `export` を付けよう．`export` がないと k6 は options を読みません．"
+  - when: { fail: options }
+    text: "`duration` は `'10s'` のように単位付きの文字列で書きます．`vus` は数値です．"
+explanation: |
+  5 VU がそれぞれ「リクエスト1回＋1秒休む」を10秒間繰り返すので，繰り返しの回数（`iterations`）はおよそ 5 × 10 = 50 回になります．
+
+  options はコマンドの引数（`k6 run --vus 5 --duration 10s`）でも指定でき，両方あるときは引数が優先されます．
+
+  参照：https://grafana.com/docs/k6/latest/using-k6/k6-options/
+tips:
+  - title: どこに書く？
+    text: |
+      「ここに options を書く」の行に書きます．関数の外（ファイルの最上位）です．
+  - title: 忘れやすいところ
+    text: |
+      - 先頭に `export` を付ける（`export const options = ...`）．付けないと k6 は options を読みません
+      - `vus` は数値（`5`），`duration` は単位付きの文字列（`'10s'`）
+  - title: 答えに近いヒント
+    text: |
+      ```
+      export const options = {
+        vus: 5,
+        duration: '10s',
+      };
+      ```

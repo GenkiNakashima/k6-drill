@@ -1,0 +1,111 @@
+id: B03
+level: basic
+title: 段階的な負荷
+scenario: 利用者が徐々に増え，しばらく続き，やがて引いていく状況を作りたい
+minutes: 5
+doc:
+  - https://grafana.com/docs/k6/latest/using-k6/k6-options/
+type: code
+statement: |
+  ## 状況
+
+  始業時刻に向けて利用者が少しずつ増え，しばらく同じ人数が使い続け，そのあと引いていく．いまのコードは最初から最後まで 10 VU のままで，この流れを表せていない．
+
+  ## やること
+
+  `vus` と `duration` の代わりに `stages` を書き，次の3段で負荷をかけてください．
+
+  1. 5秒かけて 10 VU まで上げる
+  2. 10秒間 10 VU を保つ
+  3. 5秒かけて 0 VU まで下げる
+
+  ## 書き方の型
+
+  `stages` は「`duration` の間に VU の数を `target` まで変える」段の配列です．
+
+  ```
+  stages: [
+    { duration: '5s', target: 10 },
+    ...
+  ],
+  ```
+starter: |
+  import http from 'k6/http';
+  import { sleep } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 10,
+    duration: '20s',
+  };
+
+  export default function () {
+    http.get(`${BASE_URL}/api/ping`);
+    sleep(1);
+  }
+solution: |
+  import http from 'k6/http';
+  import { sleep } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    stages: [
+      { duration: '5s', target: 10 },
+      { duration: '10s', target: 10 },
+      { duration: '5s', target: 0 },
+    ],
+  };
+
+  export default function () {
+    http.get(`${BASE_URL}/api/ping`);
+    sleep(1);
+  }
+judge:
+  static:
+    min_stages: 3
+    min_vus: 10
+    stages_end_at_zero: true
+    must_not_contain: ['\bvus\s*:', '\bduration\s*:\s*[''"`]20s']
+  run:
+    exit_code: 0
+    requests:
+      - url_contains: /api/ping
+        status: 200
+        min: 10
+hints:
+  - when: { fail: min_stages }
+    text: "`stages: [ { duration: '5s', target: 10 }, ... ]` のように，段を配列で3つ書こう．"
+  - when: { fail: must_not_contain }
+    text: "`stages` を書いたら，`vus` と `duration` は消そう．両方あると，どちらの負荷のかけ方なのかが読む人に分かりにくくなります．"
+explanation: |
+  `stages` を書くと，k6 は `ramping-vus` という executor でテストを実行します．負荷を少しずつ上げると，どの負荷から応答が遅くなるかが見えやすくなります．
+
+  上げる段・保つ段・下げる段の3つは，負荷試験でよく使う形です．
+
+  参照：https://grafana.com/docs/k6/latest/using-k6/k6-options/
+tips:
+  - title: 3つの段を言いかえると
+    text: |
+      | 段 | duration | target |
+      | --- | --- | --- |
+      | 上げる | `'5s'` | `10` |
+      | 保つ | `'10s'` | `10` |
+      | 下げる | `'5s'` | `0` |
+
+      「保つ」段は，target を前の段と同じにすると VU の数が変わりません．
+  - title: vus と duration はどうする？
+    text: |
+      `stages` を書いたら，`vus: 10,` と `duration: '20s',` の2行は消します．
+  - title: 答えに近いヒント
+    text: |
+      ```
+      export const options = {
+        stages: [
+          { duration: '5s', target: 10 },
+          { duration: '10s', target: 10 },
+          { duration: '5s', target: 0 },
+        ],
+      };
+      ```

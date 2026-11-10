@@ -1,0 +1,92 @@
+id: B09
+level: basic
+title: 環境変数
+scenario: 同じスクリプトで，テストする環境（接続先）を切り替えたい
+minutes: 4
+doc:
+  - https://grafana.com/docs/k6/latest/using-k6/environment-variables/
+type: code
+statement: |
+  ## 状況
+
+  手元の PC，検証用のサーバー，本番に近い環境で，同じスクリプトを使い回したい．このスクリプトには接続先 `http://localhost:9999` が直接書かれていて，環境を変えるたびに書き換えが要る（しかもこの接続先は誤っている）．
+
+  ## やること
+
+  接続先を，環境変数 `BASE_URL` から読むように直してください．
+
+  ## 書き方の型
+
+  ```
+  k6 run -e BASE_URL=http://localhost:8090 script.js
+  ```
+
+  で渡した値は，スクリプトの中で `__ENV.BASE_URL` として読めます．
+
+  ```
+  const BASE_URL = __ENV.BASE_URL;
+  ```
+
+  注意：k6 のスクリプトは Node.js では動きません．`process.env` は使えません．
+starter: |
+  import http from 'k6/http';
+  import { check } from 'k6';
+
+  const BASE_URL = 'http://localhost:9999';
+
+  export const options = {
+    vus: 1,
+    iterations: 3,
+  };
+
+  export default function () {
+    const res = http.get(`${BASE_URL}/api/ping`);
+    check(res, { 'status 200': (r) => r.status === 200 });
+  }
+solution: |
+  import http from 'k6/http';
+  import { check } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 1,
+    iterations: 3,
+  };
+
+  export default function () {
+    const res = http.get(`${BASE_URL}/api/ping`);
+    check(res, { 'status 200': (r) => r.status === 200 });
+  }
+judge:
+  static:
+    env: [BASE_URL]
+    must_not_contain: ['localhost:9999']
+    requests:
+      - method: GET
+        path: /api/ping
+        uses_base_url: true
+  run:
+    exit_code: 0
+    checks_rate_min: 1.0
+hints:
+  - when: { fail: env }
+    text: "`const BASE_URL = __ENV.BASE_URL;` にしよう．"
+  - when: { problem: process }
+    text: "`process` は Node.js のもので，k6 にはありません．`__ENV.BASE_URL` を使おう．"
+explanation: |
+  `__ENV` を使うと，同じスクリプトで接続先を切り替えてテストできます．
+
+  `-e` を渡し忘れると `__ENV.BASE_URL` は `undefined` になり，リクエストは1件も届きません．よく使う書き方として，`const BASE_URL = __ENV.BASE_URL || 'http://localhost:8090';` のように既定値を決めておく方法もあります．
+
+  参照：https://grafana.com/docs/k6/latest/using-k6/environment-variables/
+tips:
+  - title: 直すのは1行
+    text: |
+      `const BASE_URL = 'http://localhost:9999';` の行だけを直します．ほかの行はそのままで動きます．
+  - title: 答えに近いヒント
+    text: |
+      ```
+      const BASE_URL = __ENV.BASE_URL;
+      ```
+      `__ENV` の前のアンダースコアは2つです．

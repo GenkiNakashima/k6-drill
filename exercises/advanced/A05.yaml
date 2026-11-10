@@ -1,0 +1,137 @@
+id: A05
+level: advanced
+title: 偽りの成功を見抜く
+scenario: 「全閾値合格・終了コード0」の結果を，本当に何かを測れたのか疑って確かめたい
+minutes: 8
+type: code
+statement: |
+  ## 状況
+
+  ある人が「一覧 API が混雑時にも速いか」を確かめるテストを書き，次の結果を得て「すべての閾値に合格した．性能に問題はない」と報告した．
+
+  ```
+  $ k6 run -e BASE_URL=http://localhost:8090 script.js
+  ERRO[0000] ReferenceError: process is not defined
+          at default (file:///work/script.js:16:20(3))  executor=shared-iterations scenario=default source=stacktrace
+  （同じエラーが50回）
+
+    █ THRESHOLDS
+
+      http_req_duration
+      ✓ 'p(95)<500' p(95)=0s
+
+      http_req_failed
+      ✓ 'rate<0.01' rate=0.00%
+
+
+    █ TOTAL RESULTS
+
+      EXECUTION
+      iteration_duration...: avg=120.4µs min=31µs med=58µs max=2.1ms p(90)=104µs p(95)=301µs
+      iterations...........: 50     4120.9/s
+
+      NETWORK
+      data_received........: 0 B    0 B/s
+      data_sent............: 0 B    0 B/s
+
+  $ echo $?
+  0
+  ```
+
+  ## やること
+
+  **前半**：上の結果について，下の設問に答えてください．
+
+  **後半**：下のエディタにあるのが，そのテストのコードです．劣化を検出できるテストになるよう直してください．
+quiz:
+  - question: このテストは，一覧 API の劣化を検出できたか．
+    choices:
+      - text: できた．閾値がすべて ✓ で，終了コードも 0 なので，性能に問題はない
+        explain: "閾値の実測値が `p(95)=0s` で，HTTP の指標（`http_reqs`）が集計表示にありません．リクエストを1件も送っていません．"
+      - text: できていない．リクエストを1件も送っておらず，閾値は何も測らずに合格している
+        correct: true
+        explain: "`data_sent` が 0 B で，`iteration_duration` がマイクロ秒です．繰り返しはすぐにエラーで終わっています．"
+      - text: 判断できない．終了コードが 0 なので k6 が正常に動いたことだけは確かだ
+        explain: "終了コード 0 は「閾値がすべて合格，または閾値がない」という意味で，何かを検証できたことは意味しません．"
+  - question: 原因はどれか．
+    choices:
+      - text: 練習用サーバーが起動していなかった
+        explain: "サーバーに接続できなければ `http_reqs` は数えられ，`http_req_failed` が 100% になります．この結果ではリクエスト自体が送られていません．"
+      - text: k6 には Node.js の `process` がなく，接続先を読む行で毎回例外が起きていた
+        correct: true
+        explain: "k6 のスクリプトは Node.js ではなく k6 の中の JavaScript で動きます．環境変数は `__ENV` で読みます．"
+      - text: 閾値の値が緩すぎた
+        explain: "閾値を厳しくしても，測定0件なら値は 0 で評価されるので合格します．"
+starter: |
+  import http from 'k6/http';
+  import { check } from 'k6';
+
+  export const options = {
+    vus: 5,
+    iterations: 50,
+    thresholds: {
+      http_req_duration: ['p(95)<500'],
+      http_req_failed: ['rate<0.01'],
+    },
+  };
+
+  export default function () {
+    // 接続先は環境変数から読む
+    const BASE_URL = process.env.__ENV.BASE_URL;
+    const res = http.get(`${BASE_URL}/api/items`);
+    check(res, { 'status 200': (r) => r.status === 200 });
+  }
+solution: |
+  import http from 'k6/http';
+  import { check } from 'k6';
+
+  export const options = {
+    vus: 5,
+    iterations: 50,
+    thresholds: {
+      http_req_duration: ['p(95)<500'],
+      http_req_failed: ['rate<0.01'],
+    },
+  };
+
+  export default function () {
+    // 接続先は環境変数から読む
+    const BASE_URL = __ENV.BASE_URL;
+    const res = http.get(`${BASE_URL}/api/items`);
+    check(res, { 'status 200': (r) => r.status === 200 });
+  }
+judge:
+  static:
+    env: [BASE_URL]
+    requests:
+      - method: GET
+        path: /api/items
+        uses_base_url: true
+  run:
+    exit_code: 0
+    min_http_reqs: 1
+    log_must_not_contain: [ReferenceError]
+hints:
+  - when: { problem: process }
+    text: "k6 には Node.js の `process` はありません．環境変数は `__ENV.BASE_URL` で読もう．"
+explanation: |
+  終了コード 0 は，何も検証していなくても出ます．テストが合格したときは，少なくとも次を確かめましょう．
+
+  - ログにエラー（`ERRO`）が出ていないか
+  - `http_reqs` が想定した件数になっているか
+  - 閾値の実測値が 0 や空になっていないか
+
+  参照：https://grafana.com/docs/k6/latest/using-k6/environment-variables/
+tips:
+  - title: 設問のヒント
+    text: |
+      集計表示の `data_sent`（送ったデータの量）と `iteration_duration`（1回の繰り返しにかかった時間）を見よう．リクエストを送っていれば，どちらも 0 や µs（マイクロ秒）にはなりません．
+  - title: コードのヒント
+    text: |
+      ログの `ReferenceError: process is not defined` が原因です．k6 には `process` がありません．
+  - title: 答えに近いヒント
+    text: |
+      直すのは1行です．
+      ```
+      const BASE_URL = __ENV.BASE_URL;
+      ```

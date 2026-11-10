@@ -1,0 +1,121 @@
+id: A09
+level: advanced
+title: 毎秒 N 件を保つ
+scenario: 「毎秒20件のリクエストが来る」という前提で，応答が遅くなっても到着のペースを落とさずに測りたい
+minutes: 8
+optional: true
+type: code
+doc:
+  - https://grafana.com/docs/k6/latest/using-k6/scenarios/executors/constant-arrival-rate/
+statement: |
+  ## 状況
+
+  アクセスの記録から「一覧には **毎秒20件** のリクエストが来る」と分かっている．いまのコードは「20 VU が1件送って1秒休む」ので，応答が速いうちは毎秒20件近くになる．しかし応答が遅くなると，各 VU が次のリクエストを送るのも遅れ，**到着のペースが勝手に落ちて** しまう．実際の利用者は，サーバーが遅くても待ってくれない．
+
+  ## やること
+
+  `scenarios` で executor `constant-arrival-rate` を使い，**毎秒20回**（`rate: 20`，`timeUnit: '1s'`）の繰り返しを30秒間続けてください．
+
+  - arrival-rate の executor では，あらかじめ用意する VU の数 `preAllocatedVUs` が必要です（足りないときに増やせる上限は `maxVUs`）
+  - 繰り返しの中で `sleep()` は要りません（ペースは executor が決めます）
+  - 一覧 `/api/items` だけを測る応答時間の閾値を置いてください
+
+  ## 書き方の型
+
+  ```
+  scenarios: {
+    名前: {
+      executor: 'constant-arrival-rate',
+      rate: 20, timeUnit: '1s', duration: '30s',
+      preAllocatedVUs: 20, maxVUs: 50,
+    },
+  },
+  ```
+starter: |
+  import http from 'k6/http';
+  import { check, sleep } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 20,
+    duration: '30s',
+  };
+
+  export default function () {
+    const res = http.get(`${BASE_URL}/api/items`);
+    check(res, { 'items 200': (r) => r.status === 200 });
+    sleep(1);
+  }
+solution: |
+  import http from 'k6/http';
+  import { check } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    scenarios: {
+      browse: {
+        executor: 'constant-arrival-rate',
+        rate: 20,
+        timeUnit: '1s',
+        duration: '30s',
+        preAllocatedVUs: 20,
+        maxVUs: 50,
+      },
+    },
+    thresholds: {
+      'http_req_duration{name:items}': ['p(95)<500'],
+    },
+  };
+
+  export default function () {
+    const res = http.get(`${BASE_URL}/api/items`, { tags: { name: 'items' } });
+    check(res, { 'items 200': (r) => r.status === 200 });
+  }
+judge:
+  static:
+    max_vus: 100
+    scenarios:
+      - executor: constant-arrival-rate
+        fields: { rate: 20, timeUnit: 1s, duration: 30s }
+    thresholds:
+      - for_path: /api/items
+  run:
+    exit_code: 0
+hints:
+  - when: { fail: scenarios }
+    text: "`vus` と `duration` の代わりに `scenarios: { browse: { executor: 'constant-arrival-rate', rate: 20, timeUnit: '1s', duration: '30s', ... } }` を書こう．"
+  - when: { problem: arrival_prealloc }
+    text: "`preAllocatedVUs: 20` のように，あらかじめ用意する VU の数を書こう．"
+explanation: |
+  k6 の負荷のかけ方には2つの考え方があります．
+
+  - **VU の数を決める**（`vus`，`stages`，`constant-vus`）：応答が遅くなると，1秒あたりのリクエストも減る（closed model）
+  - **到着の速さを決める**（`constant-arrival-rate`，`ramping-arrival-rate`）：応答が遅くても，決めたペースで繰り返しを始める（open model）
+
+  「毎秒◯件来る」という要件なら arrival-rate を使います．用意した VU が足りずに始められなかった繰り返しは `dropped_iterations` に数えられるので，`dropped_iterations: ['count<1']` のような閾値を置くこともできます．
+
+  参照：https://grafana.com/docs/k6/latest/using-k6/scenarios/executors/constant-arrival-rate/
+tips:
+  - title: 何を変える？
+    text: |
+      `vus` と `duration` を消し，`scenarios` に `constant-arrival-rate` のシナリオを1つ書きます．`default` 関数の `sleep(1)` は消します（ペースは executor が決めます）．
+  - title: scenarios の形
+    text: |
+      ```
+      scenarios: {
+        browse: {
+          executor: 'constant-arrival-rate',
+          rate: 20,
+          timeUnit: '1s',
+          duration: '30s',
+          preAllocatedVUs: 20,
+          maxVUs: 50,
+        },
+      },
+      ```
+      `exec` を書かなければ，`default` 関数が使われます．
+  - title: 閾値
+    text: |
+      一覧のリクエストに `{ tags: { name: 'items' } }` を付け，`'http_req_duration{name:items}': ['p(95)<500']` を置きます．

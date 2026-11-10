@@ -1,0 +1,179 @@
+id: A04
+level: advanced
+title: シナリオを分ける
+scenario: ふるまいの違う利用者（見るだけの人とファイルを送る人）が同時にいる状況を作りたい
+minutes: 10
+type: code
+assets: [sample.png]
+doc:
+  - https://grafana.com/docs/k6/latest/using-k6/scenarios/
+statement: |
+  ## 状況
+
+  実際のシステムには，一覧を見るだけの利用者と，ファイルを送る利用者が同時にいる．人数も操作も違うのに，このスクリプトは1つの `default` 関数にまとめてしまっている．
+
+  ## やること
+
+  `scenarios` を使って，次の2つのシナリオに分けてください．
+
+  | シナリオ名 | 実行する関数（`exec`） | 負荷 |
+  | --- | --- | --- |
+  | `browse` | 一覧を見る関数 `browse` | `constant-vus` で 5 VU，10秒 |
+  | `upload` | ファイルを送る関数 `upload` | `per-vu-iterations` で 2 VU，各5回 |
+
+  そのうえで，シナリオごとに閾値を置いてください（k6 は計測値にシナリオの名前を `scenario` タグとして自動で付けます）．
+
+  - `'http_req_duration{scenario:browse}': ['p(95)<500']`
+  - `'http_req_duration{scenario:upload}': ['p(95)<500']`
+
+  ## 書き方の型
+
+  ```
+  export const options = {
+    scenarios: {
+      browse: { executor: 'constant-vus', vus: 5, duration: '10s', exec: 'browse' },
+    },
+  };
+  export function browse() { ... }
+  ```
+starter: |
+  import http from 'k6/http';
+  import { check, sleep } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+  const img = open('./sample.png', 'b');
+
+  export const options = {
+    vus: 5,
+    duration: '10s',
+  };
+
+  export default function () {
+    // 一覧を見る利用者
+    const list = http.get(`${BASE_URL}/api/items`);
+    check(list, { 'items 200': (r) => r.status === 200 });
+
+    // ファイルを送る利用者
+    const up = http.post(
+      `${BASE_URL}/api/files`,
+      { file: http.file(img, 'sample.png', 'image/png') },
+      { headers: { 'X-User-ID': 'student-1' } },
+    );
+    check(up, { 'uploaded': (r) => r.status === 201 });
+
+    sleep(0.5);
+  }
+solution: |
+  import http from 'k6/http';
+  import { check, sleep } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+  const img = open('./sample.png', 'b');
+
+  export const options = {
+    scenarios: {
+      browse: { executor: 'constant-vus', vus: 5, duration: '10s', exec: 'browse' },
+      upload: { executor: 'per-vu-iterations', vus: 2, iterations: 5, exec: 'upload' },
+    },
+    thresholds: {
+      'http_req_duration{scenario:browse}': ['p(95)<500'],
+      'http_req_duration{scenario:upload}': ['p(95)<500'],
+    },
+  };
+
+  export function browse() {
+    const list = http.get(`${BASE_URL}/api/items`);
+    check(list, { 'items 200': (r) => r.status === 200 });
+    sleep(0.5);
+  }
+
+  export function upload() {
+    const up = http.post(
+      `${BASE_URL}/api/files`,
+      { file: http.file(img, 'sample.png', 'image/png') },
+      { headers: { 'X-User-ID': 'student-1' } },
+    );
+    check(up, { 'uploaded': (r) => r.status === 201 });
+    sleep(1);
+  }
+judge:
+  static:
+    min_scenarios: 2
+    scenarios:
+      - name: browse
+        exec: browse
+        executor: constant-vus
+        fields: { vus: 5, duration: 10s }
+      - name: upload
+        exec: upload
+        executor: per-vu-iterations
+        fields: { vus: 2, iterations: 5 }
+    requests:
+      - method: GET
+        path: /api/items
+        in: browse
+      - method: POST
+        path: /api/files
+        in: upload
+    thresholds:
+      - metric: "http_req_duration{scenario:browse}"
+        expr: "p(95)<500"
+      - metric: "http_req_duration{scenario:upload}"
+        expr: "p(95)<500"
+  run:
+    exit_code: 0
+    thresholds:
+      - metric: "http_req_duration{scenario:browse}"
+        min_count: 1
+      - metric: "http_req_duration{scenario:upload}"
+        min_count: 1
+hints:
+  - when: { problem: exec_not_exported }
+    text: "`exec` に書いた名前の関数を export しているか．`export function browse() { ... }` のように書こう．"
+  - when: zero_sample_threshold
+    text: "シナリオの名前（`scenarios` のキー）と，閾値の `{scenario:...}` が一致しているか確かめよう．"
+  - when: { fail: min_scenarios }
+    text: "`vus` と `duration` の代わりに `scenarios` を書き，`browse` と `upload` の2つを置こう．"
+explanation: |
+  `scenarios` を使うと，利用者の種類ごとに executor（負荷のかけ方）と実行する関数（`exec`）を分けられます．
+
+  - `constant-vus`：決めた数の VU を決めた時間動かす
+  - `per-vu-iterations`：各 VU が決めた回数だけ繰り返す
+  - `ramping-vus`：`stages` のように VU の数を上げ下げする
+  - `constant-arrival-rate`：1秒あたりの繰り返しの回数を一定にする（A09）
+
+  計測値には `scenario` タグが自動で付くので，`{scenario:browse}` のようにシナリオ単位の閾値を置けます．
+
+  参照：https://grafana.com/docs/k6/latest/using-k6/scenarios/
+tips:
+  - title: 手順
+    text: |
+      1. options の `vus` と `duration` を消し，`scenarios` を書く
+      2. `default` 関数を，一覧を見る `browse()` とファイルを送る `upload()` の2つの関数に分ける（どちらも `export` を付ける）
+      3. options に `thresholds` を足す
+  - title: scenarios の形
+    text: |
+      ```
+      scenarios: {
+        browse: { executor: 'constant-vus', vus: 5, duration: '10s', exec: 'browse' },
+        upload: { executor: 'per-vu-iterations', vus: 2, iterations: 5, exec: 'upload' },
+      },
+      ```
+      `exec` に書いた名前と，関数の名前を同じにします．
+  - title: 関数と閾値の形
+    text: |
+      ```
+      export function browse() {
+        // 一覧を見る2行と sleep
+      }
+      export function upload() {
+        // ファイルを送る2行と sleep
+      }
+      ```
+      ```
+      thresholds: {
+        'http_req_duration{scenario:browse}': ['p(95)<500'],
+        'http_req_duration{scenario:upload}': ['p(95)<500'],
+      },
+      ```
+      シナリオ名は自動で `scenario` タグになるので，リクエストにタグを付ける必要はありません．

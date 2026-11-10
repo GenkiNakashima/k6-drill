@@ -1,0 +1,115 @@
+id: B05
+level: basic
+title: 閾値の基本
+scenario: 「失敗は1% 未満，95% が 500ms 以内」のような合格の条件をテストに組み込みたい
+minutes: 6
+doc:
+  - https://grafana.com/docs/k6/latest/using-k6/thresholds/
+type: code
+statement: |
+  ## 状況
+
+  チームで「失敗したリクエストは 1% 未満，リクエストの95% は 500ms 以内に返す」と決めた．この条件を満たさないとき，テストが **不合格**（終了コード 99）になるようにしたい．
+
+  ## やること
+
+  `options` に `thresholds` を足し，次の2つの閾値を置いてください．
+
+  | 指標 | 意味 | 閾値 |
+  | --- | --- | --- |
+  | `http_req_failed` | 失敗したリクエストの割合 | `'rate<0.01'` |
+  | `http_req_duration` | リクエストにかかった時間（ミリ秒） | `'p(95)<500'` |
+
+  ## 書き方の型
+
+  ```
+  thresholds: {
+    指標の名前: ['条件', '条件2'],
+  },
+  ```
+
+  閾値がなければ，どれだけ遅くても失敗しても，k6 の終了コードは 0 です．
+starter: |
+  import http from 'k6/http';
+  import { sleep } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 2,
+    duration: '10s',
+    // ここに thresholds を足す
+  };
+
+  export default function () {
+    http.get(`${BASE_URL}/api/flaky`);
+    http.get(`${BASE_URL}/api/slow?ms=100`);
+    sleep(0.5);
+  }
+solution: |
+  import http from 'k6/http';
+  import { sleep } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 2,
+    duration: '10s',
+    thresholds: {
+      http_req_failed: ['rate<0.01'],
+      http_req_duration: ['p(95)<500'],
+    },
+  };
+
+  export default function () {
+    http.get(`${BASE_URL}/api/flaky`);
+    http.get(`${BASE_URL}/api/slow?ms=100`);
+    sleep(0.5);
+  }
+judge:
+  static:
+    thresholds:
+      - metric: http_req_failed
+        expr: "rate<0.01"
+      - metric: http_req_duration
+        expr: "p(95)<500"
+  run:
+    exit_code: 99
+    thresholds:
+      - metric: http_req_failed
+        expr: "rate<0.01"
+        ok: false
+        min_count: 1
+      - metric: http_req_duration
+        expr: "p(95)<500"
+        ok: true
+        min_count: 1
+hints:
+  - when: { fail: thresholds }
+    text: "`thresholds: { http_req_failed: ['rate<0.01'], http_req_duration: ['p(95)<500'] }` のように，指標の名前をキーに，条件の文字列を配列で書こう．"
+  - when: { problem: threshold_not_array }
+    text: "閾値の値は `['rate<0.01']` のように配列で書きます．"
+explanation: |
+  `/api/flaky` は10件に1件 500 を返すので，k6 で実行すると全リクエストの約5% が失敗し，`rate<0.01` を満たさずに終了コード 99 で終わります（「k6 で実行」で確かめられます）．
+
+  - 0：閾値がすべて合格，または閾値がない
+  - 99：閾値のどれかが不合格
+
+  閾値がないテストは，何が起きても 0 で終わります．「0 だから問題ない」とは限りません．
+
+  参照：https://grafana.com/docs/k6/latest/using-k6/thresholds/
+tips:
+  - title: どこに書く？
+    text: |
+      `options` の中の「ここに thresholds を足す」の行に書きます．`vus` や `duration` と並べます．
+  - title: 形
+    text: |
+      `thresholds` はオブジェクトで，**キーが指標の名前**，**値が条件の配列** です．条件は文字列で，配列 `[ ]` で囲みます．
+  - title: 答えに近いヒント
+    text: |
+      ```
+      thresholds: {
+        http_req_failed: ['rate<0.01'],
+        http_req_duration: ['p(95)<500'],
+      },
+      ```

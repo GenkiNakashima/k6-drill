@@ -1,0 +1,153 @@
+id: B12
+level: basic
+title: setup で一度だけ準備する
+scenario: ログインは最初に1回だけにして，ログインしたあとの操作の負荷だけを測りたい
+minutes: 6
+doc:
+  - https://grafana.com/docs/k6/latest/using-k6/test-lifecycle/
+type: code
+statement: |
+  ## 状況
+
+  知りたいのは「ログインしたあとに `/api/me` を何度も見る」ときの速さで，ログインの負荷は測りたくない．いまのコードは繰り返しのたびにログインしていて，ログインの負荷も一緒にかかっている．
+
+  ## やること
+
+  1. ログインを `export function setup()` に移し，トークンを `return { token }` で返す
+  2. `export default function (data)` で受け取り，`data.token` を `/api/me` の `Authorization` ヘッダーに使う
+  3. `default` 関数の中ではログインしない
+
+  ## 書き方の型
+
+  ```
+  export function setup() {
+    // テスト全体で1回だけ動く
+    return { token: ... };
+  }
+
+  export default function (data) {
+    // data.token が使える
+  }
+  ```
+starter: |
+  import http from 'k6/http';
+  import { check, sleep } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 5,
+    duration: '10s',
+  };
+
+  export default function () {
+    const loginRes = http.post(
+      `${BASE_URL}/api/login`,
+      JSON.stringify({ user: 'drill', password: 'k6-practice' }),
+      { headers: { 'Content-Type': 'application/json' } },
+    );
+    const token = loginRes.json('token');
+
+    const res = http.get(`${BASE_URL}/api/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    check(res, { 'got me': (r) => r.status === 200 });
+    sleep(1);
+  }
+solution: |
+  import http from 'k6/http';
+  import { check, sleep } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 5,
+    duration: '10s',
+  };
+
+  export function setup() {
+    const loginRes = http.post(
+      `${BASE_URL}/api/login`,
+      JSON.stringify({ user: 'drill', password: 'k6-practice' }),
+      { headers: { 'Content-Type': 'application/json' } },
+    );
+    return { token: loginRes.json('token') };
+  }
+
+  export default function (data) {
+    const res = http.get(`${BASE_URL}/api/me`, {
+      headers: { Authorization: `Bearer ${data.token}` },
+    });
+    check(res, { 'got me': (r) => r.status === 200 });
+    sleep(1);
+  }
+judge:
+  static:
+    setup_returns: true
+    default_uses_data: true
+    requests:
+      - method: POST
+        path: /api/login
+        in: setup
+        body: json
+      - method: POST
+        path: /api/login
+        in: default
+        max: 0
+        label: default 関数の中のログイン（POST /api/login）
+      - method: GET
+        path: /api/me
+        in: default
+        headers: { Authorization: '^Bearer \S' }
+  run:
+    exit_code: 0
+    checks_rate_min: 1.0
+    requests:
+      - url_contains: /api/login
+        method: POST
+        status: 200
+        min: 1
+hints:
+  - when: { fail: setup_returns }
+    text: "setup() の最後に `return { token: loginRes.json('token') };` と書くと，その値が default 関数の引数に渡ります．"
+  - when: { fail: default_uses_data }
+    text: "`export default function (data) { ... }` のように引数を受け取り，`data.token` を使おう．"
+  - when: { fail: requests }
+    text: "ログインの `http.post(...)` は setup() の中だけに書き，default 関数からは消そう．"
+explanation: |
+  `setup()` はテスト全体で1回だけ動き，その戻り値が各 VU の `default` 関数に引数として渡されます．ログインやテストデータの準備など，「負荷として測りたくない準備」はここに書きます．
+
+  - init 段階：VU ごとに1回．HTTP リクエストは送れない
+  - `setup()`：テスト全体で1回．HTTP リクエストを送れる
+  - `default`：繰り返し．ここが負荷の本体
+
+  参照：https://grafana.com/docs/k6/latest/using-k6/test-lifecycle/
+tips:
+  - title: 手順
+    text: |
+      1. `export function setup() { ... }` を新しく作り，ログインの3行（`http.post(...)` と `token` の取り出し）をそこへ移す
+      2. setup の最後で `return { token: ... };` する
+      3. `export default function ()` を `export default function (data)` にし，`token` を `data.token` に変える
+  - title: setup の形
+    text: |
+      ```
+      export function setup() {
+        const loginRes = http.post(
+          `${BASE_URL}/api/login`,
+          JSON.stringify({ user: 'drill', password: 'k6-practice' }),
+          { headers: { 'Content-Type': 'application/json' } },
+        );
+        return { token: loginRes.json('token') };
+      }
+      ```
+  - title: default の形
+    text: |
+      ```
+      export default function (data) {
+        const res = http.get(`${BASE_URL}/api/me`, {
+          headers: { Authorization: `Bearer ${data.token}` },
+        });
+        ...
+      }
+      ```
+      default 関数の中に `http.post(...login...)` が残っていないか確かめよう．

@@ -1,0 +1,70 @@
+id: B10
+level: basic
+title: init と VU
+minutes: 4
+doc:
+  - https://grafana.com/docs/k6/latest/using-k6/test-lifecycle/
+type: quiz
+statement: |
+  k6 のテストは，次の4つの段階で動きます．
+
+  | 段階 | 書く場所 | 実行される回数 |
+  | --- | --- | --- |
+  | init | 関数の外（ファイルの最上位） | VU ごとに1回 |
+  | setup | `export function setup()` | テスト全体で1回 |
+  | VU のコード | `export default function ()` | 繰り返し何回も |
+  | teardown | `export function teardown(data)` | テスト全体で1回 |
+
+  次の設問に答えてください．
+quiz:
+  - question: ファイルを読み込む `open()` について正しいものはどれか．
+    choices:
+      - text: どこで呼んでもよい
+        explain: "`open()` は init 段階でだけ呼べます．"
+      - text: init 段階（関数の外）でだけ呼べる
+        correct: true
+        explain: "VU のコードの中で呼ぶと，毎回 `only available in the init stage` という実行時エラーになります．"
+      - text: "`setup()` の中でだけ呼べる"
+        explain: "`setup()` も init 段階ではないので，`open()` は呼べません．"
+      - text: "`default` 関数の中でだけ呼べる"
+        explain: "逆です．`default` 関数の中では呼べません．"
+  - question: 次のスクリプトを `k6 run` で実行した．何が起きるか．
+    code: |
+      import http from 'k6/http';
+      export default function () {
+        const img = open('./photo.png', 'b');
+        http.post(`${__ENV.BASE_URL}/upload`, { file: http.file(img) });
+      }
+    choices:
+      - text: スクリプトの読み込みで止まり，テストは始まらない
+        explain: "`open()` を呼んでいるのは VU のコードの中なので，読み込み（init 段階）では問題は起きません．"
+      - text: 繰り返しのたびに実行時エラーがログに出るが，テストは最後まで動き，閾値がなければ終了コードは 0 になる
+        correct: true
+        explain: "VU のコードの中のエラーはその回の繰り返しを打ち切るだけで，テストは止まりません．リクエストは1件も送られません．"
+      - text: 1回目だけエラーになり，2回目からはファイルが読める
+        explain: "毎回同じエラーになります．"
+  - question: 50 VU のテストで，ログインして得たトークンを全 VU で共有して使いたい．どこでログインするのがよいか．
+    choices:
+      - text: init 段階（関数の外）
+        explain: "init 段階では HTTP リクエストを送れません．また init は VU ごとに実行されます．"
+      - text: "`setup()` でログインし，戻り値を `default(data)` で受け取る"
+        correct: true
+        explain: "`setup()` はテスト全体で1回だけ動き，その戻り値が各 VU の `default` 関数の引数に渡されます．"
+      - text: "`default` 関数の中で，毎回ログインする"
+        explain: "動きはしますが，ログインの負荷も繰り返しのたびにかかります．共有したいなら `setup()` を使います．"
+explanation: |
+  - init 段階：`import`，`options`，`open()` によるファイルの読み込みなど，準備を書く．VU ごとに1回動く
+  - `setup()`：テスト全体の準備．戻り値は各 VU に渡される
+  - `default`：負荷をかける本体．繰り返し動く
+  - `teardown()`：後片付け
+
+  VU のコードの中で起きたエラーは，ログに出るだけでテストを止めません．応用問題 A03 と A05 では，この性質のために「何も測っていないのに合格する」テストを扱います．
+
+  参照：https://grafana.com/docs/k6/latest/using-k6/test-lifecycle/
+tips:
+  - title: 表を見よう
+    text: |
+      問題文の表の「書く場所」と「実行される回数」の列に注目しよう．`open()` は「準備」なので init 段階です．
+  - title: VU のコードのエラー
+    text: |
+      `default` 関数の中で起きたエラーは，その回の繰り返しを打ち切るだけで，テストは止まりません．

@@ -1,0 +1,138 @@
+id: A06
+level: advanced
+title: SLO を自分で決める
+scenario: 利用文脈（誰が，いつ，何人で，何をするか）だけから，負荷とエンドポイント別の目標を決めたい
+minutes: 12
+optional: true
+type: code
+statement: |
+  ## 状況
+
+  次の利用文脈だけをもとに，負荷のかけ方と閾値を **自分で決めて** テストを書いてください．閾値の数値は与えません．
+
+  > 平日の朝，社員50人がほぼ同時にログインし，一覧を数回見たあと重い処理を1回実行する．混雑していても利用者が待たされていると感じない速さを保ちたい．
+
+  使える API：
+
+  | API | 内容 |
+  | --- | --- |
+  | `POST /api/login` | JSON で `{"user": "drill", "password": "k6-practice"}` を送ると `token` が返る |
+  | `GET /api/items` | 一覧 |
+  | `GET /api/heavy` | 重い処理 |
+
+  ## 合格の条件
+
+  - `stages` などで **30 VU 以上** の負荷をかける（「k6 で実行」するなら60秒以内）
+  - ログイン，一覧，重い処理を，この順で呼ぶ
+  - `/api/items` と `/api/heavy` に，それぞれ **そのエンドポイントだけを測る** 閾値がある
+  - `/api/heavy` の閾値の上限が **5000ms 以下**（「待たされていると感じない」をどう数値にしたかを考えよう）
+  - `check` で応答を確かめている
+starter: |
+  import http from 'k6/http';
+  import { check, sleep } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 1,
+    iterations: 1,
+  };
+
+  export default function () {
+    http.get(`${BASE_URL}/api/items`);
+  }
+solution: |
+  import http from 'k6/http';
+  import { check, sleep } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    stages: [
+      { duration: '10s', target: 50 }, // 朝，ほぼ同時に集まる
+      { duration: '20s', target: 50 },
+      { duration: '5s', target: 0 },
+    ],
+    thresholds: {
+      'http_req_duration{name:login}': ['p(95)<1000'],
+      'http_req_duration{name:items}': ['p(95)<500'],
+      'http_req_duration{name:heavy}': ['p(95)<3000'],
+      http_req_failed: ['rate<0.01'],
+    },
+  };
+
+  export default function () {
+    const login = http.post(
+      `${BASE_URL}/api/login`,
+      JSON.stringify({ user: 'drill', password: 'k6-practice' }),
+      { headers: { 'Content-Type': 'application/json' }, tags: { name: 'login' } },
+    );
+    check(login, { 'logged in': (r) => r.status === 200 });
+
+    for (let i = 0; i < 3; i++) {
+      const list = http.get(`${BASE_URL}/api/items`, { tags: { name: 'items' } });
+      check(list, { 'items 200': (r) => r.status === 200 });
+      sleep(1);
+    }
+
+    const heavy = http.get(`${BASE_URL}/api/heavy`, { tags: { name: 'heavy' } });
+    check(heavy, { 'heavy 200': (r) => r.status === 200 });
+    sleep(1);
+  }
+judge:
+  static:
+    min_vus: 30
+    requests:
+      - method: POST
+        path: /api/login
+        body: json
+        headers: { Content-Type: '^application/json' }
+      - method: GET
+        path: /api/items
+      - method: GET
+        path: /api/heavy
+    thresholds:
+      - for_path: /api/items
+      - for_path: /api/heavy
+        max_ms: 5000
+    checks:
+      min: 1
+  run:
+    min_checks: 1
+    thresholds:
+      - url_contains: /api/heavy
+        min_count: 1
+hints:
+  - when: { fail: min_vus }
+    text: "社員50人が「ほぼ同時に」来る状況です．`stages` で 30 VU 以上まで上げよう．"
+  - when: only_aggregate_threshold
+    text: "集約の閾値だけでは，少数の遅いリクエストが埋もれます（A01）．`/api/items` と `/api/heavy` にそれぞれタグを付け，タグで絞った閾値を置こう．"
+  - when: zero_sample_threshold
+    text: "リクエストのタグと閾値の `{ }` の中が一致しているか確かめよう（A02）．"
+explanation: |
+  閾値の数値に唯一の正解はありません．大切なのは，利用文脈から「何を守りたいか」を決め，それを測れる形にすることです．
+
+  - 誰が，いつ，何人で，何をするか → 負荷のかけ方（`stages`，VU の数，1回の繰り返しの中身）
+  - どのくらいの速さなら困らないか → エンドポイントごとの閾値
+
+  練習用サーバーの `/api/heavy` は同時に1件しか処理しないので，50 VU で「k6 で実行」すると順番待ちが長くなり，多くの人が決めた閾値で不合格になります．負荷をかけて初めて見える劣化です．
+
+  参照：https://grafana.com/docs/k6/latest/using-k6/thresholds/ ，https://grafana.com/docs/k6/latest/testing-guides/api-load-testing/
+tips:
+  - title: 利用文脈を数字にする
+    text: |
+      - 「社員50人」→ VU の数は 50
+      - 「ほぼ同時に」→ 10秒くらいで 50 まで上げる
+      - 段は B03 と同じく「上げる・保つ・下げる」の3つ（全体で60秒以内）
+  - title: 1回の繰り返しの中身
+    text: |
+      ログイン（B07）→ 一覧を数回（`for` で3回）→ 重い処理を1回，の順に書き，それぞれに名前のタグを付けます（`login`，`items`，`heavy` など）．`check()` も付けよう．
+  - title: 閾値の例
+    text: |
+      ```
+      thresholds: {
+        'http_req_duration{name:items}': ['p(95)<500'],
+        'http_req_duration{name:heavy}': ['p(95)<3000'],
+      },
+      ```
+      数値は自分で決めてかまいません（heavy は 5000 以下）．「待たされていると感じない」のはどのくらいかを考えて決めよう．

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>k6ドリル</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>k6ドリル</h1>
+    <div class="progress" id="progress">
+      <div class="bar"><div class="fill" id="progress-fill"></div></div>
+      <span id="progress-text"></span>
+    </div>
+    <button class="ghost" id="open-recipes">レシピ集</button>
+    <button class="ghost" id="open-settings">設定</button>
+  </header>
+
+  <div id="status-banner" class="banner" hidden></div>
+
+  <div class="layout">
+    <nav class="sidebar" id="sidebar">
+      <h2>基本問題</h2>
+      <ol id="list-basic"></ol>
+      <h2>応用問題</h2>
+      <p class="muted small" id="advanced-note">基本問題をすべて合格すると開きます</p>
+      <ol id="list-advanced"></ol>
+    </nav>
+
+    <main id="main">
+      <section class="welcome" id="welcome">
+        <h2>ようこそ</h2>
+        <p>「こういう状況では，k6 のコードをこう書く」を，1〜2時間で身につけるための演習です．左の一覧から B01 を選んで始めてください．</p>
+        <ul>
+          <li>各問題は <strong>状況</strong> から始まります．状況に合うコードを書いて「採点」を押すと，コードを実行せずに読み取って（静的解析），すぐに採点します．k6 は要りません．</li>
+          <li>合格すると，その状況での書き方（模範コード）と解説が出ます．2回不合格になると，合格する前でも模範コードを見られます．</li>
+          <li>合格したコードは「レシピ集」に「状況 → コード」として並びます．</li>
+          <li>この PC に k6 があれば，「k6 で実行（拡張）」で練習用サーバー（<code id="target-url">http://localhost:8090</code>）に実際に負荷をかけ，結果の読み方も練習できます．</li>
+        </ul>
+      </section>
+
+      <article id="exercise" hidden>
+        <div class="ex-head">
+          <span class="ex-id" id="ex-id"></span>
+          <h2 id="ex-title"></h2>
+          <span class="muted" id="ex-meta"></span>
+        </div>
+        <div class="docs" id="ex-docs"></div>
+        <div class="statement md" id="ex-statement"></div>
+
+        <section id="tips" class="tips" hidden>
+          <h3>ヒント <span class="muted small">（困ったら上から順に開いてください．後ろほど答えに近くなります）</span></h3>
+          <div id="tips-list"></div>
+        </section>
+
+        <section id="quiz" class="quiz" hidden>
+          <div id="quiz-questions"></div>
+          <button id="quiz-check">答え合わせ</button>
+          <p id="quiz-summary" class="quiz-summary"></p>
+        </section>
+
+        <section id="code" hidden>
+          <div class="editor" id="editor">
+            <pre class="gutter" id="gutter" aria-hidden="true"></pre>
+            <textarea id="code-input" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
+          </div>
+          <div class="actions">
+            <button id="check">採点</button>
+            <button class="ghost" id="reset-code">初期コードに戻す</button>
+            <button class="ghost" id="reveal" hidden>模範コードを見る</button>
+            <span class="spacer"></span>
+            <button class="ghost" id="run" hidden title="この PC の k6 で，練習用サーバーに実際に負荷をかけます">k6 で実行（拡張）</button>
+            <span id="running" class="running" hidden><span class="spinner"></span>負荷をかけています… <span id="elapsed">0</span> 秒</span>
+            <span id="save-state" class="muted small"></span>
+          </div>
+        </section>
+
+        <section id="result" class="result" hidden></section>
+
+        <section id="solution" class="solution" hidden>
+          <h3>この状況ではこう書く</h3>
+          <p class="muted small" id="solution-scenario"></p>
+          <pre class="code" id="solution-code"></pre>
+          <button class="ghost" id="copy-solution">エディタに写す</button>
+        </section>
+
+        <section id="run-result" class="result run" hidden></section>
+
+        <section id="explanation" class="explanation" hidden>
+          <h3>解説</h3>
+          <div class="md" id="explanation-body"></div>
+        </section>
+      </article>
+
+      <section id="recipes" hidden>
+        <h2>レシピ集：こういう状況ではこう書く</h2>
+        <p class="muted">合格した問題（または模範コードを見た問題）のコードが並びます．</p>
+        <div id="recipe-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="settings">
+    <form method="dialog" class="settings">
+      <h2>設定</h2>
+      <label class="check"><input type="checkbox" id="record"> 問題ごとの操作（所要時間・合否）を記録する</label>
+      <p class="muted small">記録は任意の機能で，初期値は無効です．記録はこの PC の <code id="data-dir"></code> にだけ保存されます．</p>
+      <hr>
+      <p>合否と書きかけのコードをすべて消します．</p>
+      <button type="button" class="danger" id="reset-all">すべての進捗を消す</button>
+      <p id="reset-done" class="muted small" hidden>消しました．</p>
+      <hr>
+      <div class="right"><button value="close">閉じる</button></div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

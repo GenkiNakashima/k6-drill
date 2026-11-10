@@ -1,0 +1,113 @@
+id: A03
+level: advanced
+title: ファイルを送る
+scenario: 画像などのファイルをアップロードする操作の負荷を測りたい
+minutes: 10
+type: code
+assets: [sample.png]
+statement: |
+  ## 状況
+
+  画像 `sample.png`（スクリプトと同じ場所にある）を `POST /api/files` に multipart で送り，アップロードの応答時間を確かめたい．このコードを k6 で実行すると，閾値は合格し終了コードも 0 になるが，アップロードは1件も成功していない．
+
+  `/api/files` の仕様：multipart の `file` 欄でファイルを受け取り，201 と `id`・`size` を返す．ヘッダー `X-User-ID`（値は何でもよい）が必要で，ないと 401．
+
+  ## やること
+
+  - ファイルの読み込み（`open()`）を正しい場所に移す
+  - ヘッダー `X-User-ID` を付ける
+  - check で 201 が返ったことを確かめる（すでに書いてある）
+starter: |
+  import http from 'k6/http';
+  import { check } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 2,
+    iterations: 20,
+    thresholds: {
+      'http_req_duration{name:upload}': ['p(95)<500'],
+    },
+  };
+
+  export default function () {
+    const img = open('./sample.png', 'b');
+    const res = http.post(
+      `${BASE_URL}/api/files`,
+      { file: http.file(img, 'sample.png', 'image/png') },
+      { tags: { name: 'upload' } },
+    );
+    check(res, { 'uploaded': (r) => r.status === 201 });
+  }
+solution: |
+  import http from 'k6/http';
+  import { check } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 2,
+    iterations: 20,
+    thresholds: {
+      'http_req_duration{name:upload}': ['p(95)<500'],
+    },
+  };
+
+  // open() は init 段階（関数の外）でだけ呼べる
+  const img = open('./sample.png', 'b');
+
+  export default function () {
+    const res = http.post(
+      `${BASE_URL}/api/files`,
+      { file: http.file(img, 'sample.png', 'image/png') },
+      { headers: { 'X-User-ID': 'student-1' }, tags: { name: 'upload' } },
+    );
+    check(res, { 'uploaded': (r) => r.status === 201 });
+  }
+judge:
+  static:
+    open_in_init: true
+    requests:
+      - method: POST
+        path: /api/files
+        body: file
+        headers: { X-User-ID: '.+' }
+    checks:
+      status: [201]
+    thresholds:
+      - for_path: /api/files
+  run:
+    checks_rate_min: 1.0
+    thresholds:
+      - metric: "http_req_duration{name:upload}"
+        min_count: 1
+hints:
+  - when: { problem: open_in_vu }
+    text: "`open()` はファイルの最上位（init 段階）でだけ呼べる．`const img = open('./sample.png', 'b');` を `default` 関数の外に出そう．"
+  - when: { fail: requests }
+    text: "ヘッダー `X-User-ID` を付けたか確かめよう（`params` の `headers` に書く．`tags` と同じオブジェクトに並べられる）．"
+explanation: |
+  `open()` は init 段階でだけ呼べます．VU のコードの中で呼ぶと毎回実行時エラーになりますが，k6 はログに出すだけでテストを続けるので，
+
+  - リクエストは1件も送られない
+  - アップロードの閾値は測定0件のまま「合格」する
+  - 終了コードは 0 になる
+
+  という「何も検証していない合格」になります．ファイルは init 段階で一度読み込み，VU のコードでは読み込んだ中身を使い回します．
+
+  参照：https://grafana.com/docs/k6/latest/javascript-api/init-context/open/ ，https://grafana.com/docs/k6/latest/examples/data-uploads/
+tips:
+  - title: 問題は2つ
+    text: |
+      1. `open()` が `default` 関数の中にある（open は関数の外でしか呼べない）
+      2. ヘッダー `X-User-ID` がない
+  - title: open() を外へ出す
+    text: |
+      `const img = open('./sample.png', 'b');` の1行を，`export default function` より上（関数の外）へ移します．`default` 関数の中では，その `img` をそのまま使えます．
+  - title: ヘッダーを足す
+    text: |
+      3つ目の引数（params）に，`tags` と並べて `headers` を書きます．
+      ```
+      { headers: { 'X-User-ID': 'student-1' }, tags: { name: 'upload' } },
+      ```

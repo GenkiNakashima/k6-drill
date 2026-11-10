@@ -1,0 +1,105 @@
+id: B08
+level: basic
+title: タグを付ける
+scenario: URL が少しずつ違うリクエストを，1つのまとまりとして集計したい
+minutes: 4
+doc:
+  - https://grafana.com/docs/k6/latest/using-k6/tags-and-groups/
+type: code
+statement: |
+  ## 状況
+
+  品物の詳細 `/api/items/1` 〜 `/api/items/10` は，URL が違っても同じ処理だ．あとで「詳細ページの応答時間」としてまとめて見たい．
+
+  k6 は計測値に `name` タグを付けます．ふだんは URL と同じ値なので，このままでは URL ごとにばらばらになります．
+
+  ## やること
+
+  リクエストの引数に `tags` を書き，次の名前を付けてください．
+
+  | リクエスト | 付ける `name` タグ |
+  | --- | --- |
+  | `GET /api/items` | `items` |
+  | `GET /api/items/{id}` | `item-detail` |
+
+  ## 書き方の型
+
+  ```
+  http.get(url, { tags: { name: 'items' } });
+  ```
+starter: |
+  import http from 'k6/http';
+  import { sleep } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 2,
+    duration: '5s',
+  };
+
+  export default function () {
+    http.get(`${BASE_URL}/api/items`);
+
+    const id = Math.floor(Math.random() * 10) + 1;
+    http.get(`${BASE_URL}/api/items/${id}`);
+
+    sleep(0.5);
+  }
+solution: |
+  import http from 'k6/http';
+  import { sleep } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 2,
+    duration: '5s',
+  };
+
+  export default function () {
+    http.get(`${BASE_URL}/api/items`, { tags: { name: 'items' } });
+
+    const id = Math.floor(Math.random() * 10) + 1;
+    http.get(`${BASE_URL}/api/items/${id}`, { tags: { name: 'item-detail' } });
+
+    sleep(0.5);
+  }
+judge:
+  static:
+    requests:
+      - method: GET
+        path: /api/items
+        tags: { name: items }
+      - method: GET
+        path: /api/items/{}
+        tags: { name: item-detail }
+  run:
+    exit_code: 0
+    requests:
+      - url_regex: '/api/items$'
+        tags: { name: items }
+        min: 1
+      - url_regex: '/api/items/\d+$'
+        tags: { name: item-detail }
+        min: 1
+hints:
+  - when: { fail: requests }
+    text: "`http.get(url, { tags: { name: 'item-detail' } })` のように，2つ目の引数の `tags` に書こう．タグの値は大文字と小文字も含めて完全に一致させます．"
+explanation: |
+  `name` タグを付けると，URL が違うリクエストを1つのまとまりとして扱えます．`'http_req_duration{name:item-detail}'` という閾値を置けば，詳細のリクエストだけの応答時間で合否を決められます（応用問題 A01 で使います）．
+
+  なお `name` タグを付けると，k6 は `url` タグも同じ値にします．
+
+  参照：https://grafana.com/docs/k6/latest/using-k6/tags-and-groups/
+tips:
+  - title: どこに書く？
+    text: |
+      `http.get(URL)` の2つ目の引数（params）に `tags` を書きます．`http.get(URL, { tags: { ... } })` の形です．
+  - title: 答えに近いヒント
+    text: |
+      ```
+      http.get(`${BASE_URL}/api/items`, { tags: { name: 'items' } });
+      http.get(`${BASE_URL}/api/items/${id}`, { tags: { name: 'item-detail' } });
+      ```
+      タグの値は大文字と小文字も含めて，表のとおりに書きます．

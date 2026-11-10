@@ -1,0 +1,134 @@
+id: B07
+level: basic
+title: POST とヘッダー
+scenario: ログインして受け取ったトークンで，ログインが必要な API を呼びたい
+minutes: 6
+doc:
+  - https://grafana.com/docs/k6/latest/using-k6/http-requests/
+type: code
+statement: |
+  ## 状況
+
+  `/api/me` はログインした人しか使えない．ログインして得たトークンを付けて呼びたい．いまのコードは本文を JSON にしておらず，ヘッダーもないので，実行するとログインが 415，`/api/me` が 401 になる．
+
+  ## やること
+
+  1. `POST /api/login` に本文 `{"user": "drill", "password": "k6-practice"}` を **JSON** で送る（`JSON.stringify()` で文字列にし，ヘッダー `Content-Type: application/json` を付ける）
+  2. 応答の本文から `token` を取り出す（`loginRes.json('token')`）
+  3. `GET /api/me` に，ヘッダー `Authorization: Bearer <token>` を付けて送る
+
+  ## 書き方の型
+
+  ```
+  http.post(url, JSON.stringify({ ... }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+  http.get(url, { headers: { Authorization: `Bearer ${token}` } });
+  ```
+
+  POST では3つ目，GET では2つ目の引数が `params`（ヘッダーやタグ）です．
+starter: |
+  import http from 'k6/http';
+  import { check } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 1,
+    iterations: 3,
+  };
+
+  export default function () {
+    const loginRes = http.post(`${BASE_URL}/api/login`, {
+      user: 'drill',
+      password: 'k6-practice',
+    });
+    check(loginRes, { 'logged in': (r) => r.status === 200 });
+
+    const token = ''; // 応答からトークンを取り出す
+
+    const meRes = http.get(`${BASE_URL}/api/me`);
+    check(meRes, { 'got me': (r) => r.status === 200 });
+  }
+solution: |
+  import http from 'k6/http';
+  import { check } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 1,
+    iterations: 3,
+  };
+
+  export default function () {
+    const loginRes = http.post(
+      `${BASE_URL}/api/login`,
+      JSON.stringify({ user: 'drill', password: 'k6-practice' }),
+      { headers: { 'Content-Type': 'application/json' } },
+    );
+    check(loginRes, { 'logged in': (r) => r.status === 200 });
+
+    const token = loginRes.json('token');
+
+    const meRes = http.get(`${BASE_URL}/api/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    check(meRes, { 'got me': (r) => r.status === 200 });
+  }
+judge:
+  static:
+    must_contain: ['\.json\(']
+    requests:
+      - method: POST
+        path: /api/login
+        body: json
+        headers: { Content-Type: '^application/json' }
+      - method: GET
+        path: /api/me
+        headers: { Authorization: '^Bearer \S' }
+  run:
+    exit_code: 0
+    checks_rate_min: 1.0
+    requests:
+      - url_contains: /api/me
+        status: 200
+        min: 1
+hints:
+  - when: { fail: requests }
+    text: "本文は `JSON.stringify({ ... })` で文字列にし，`headers: { 'Content-Type': 'application/json' }` を付けよう．オブジェクトのまま渡すと，k6 はフォームの形式で送ります．"
+  - when: { fail: must_contain }
+    text: "トークンは `loginRes.json('token')` で応答の本文から取り出します．"
+explanation: |
+  - `http.post(url, body, params)`：本文が文字列ならそのまま送り，オブジェクトならフォームの形式で送る
+  - `params.headers`：リクエストヘッダー
+  - `res.json('token')`：応答の本文を JSON として読み，`token` を取り出す
+
+  ログインして得たトークンを次のリクエストに使う流れは，多くの Web アプリの負荷試験で必要になります．全員で1つのトークンを使い回すなら，B12 の `setup()` を使います．
+
+  参照：https://grafana.com/docs/k6/latest/using-k6/http-requests/
+tips:
+  - title: http.post の3つの引数
+    text: |
+      `http.post(URL, 本文, params)` です．params の中に `headers`（ヘッダー）を書きます．
+      いまは本文がオブジェクトのままで，params がありません．
+  - title: ログインを直す
+    text: |
+      本文を `JSON.stringify()` で文字列にし，3つ目の引数でヘッダーを付けます．
+      ```
+      const loginRes = http.post(
+        `${BASE_URL}/api/login`,
+        JSON.stringify({ user: 'drill', password: 'k6-practice' }),
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+      ```
+  - title: トークンを使う
+    text: |
+      トークンは `loginRes.json('token')` で取り出します．GET では2つ目の引数が params です．
+      ```
+      const token = loginRes.json('token');
+      const meRes = http.get(`${BASE_URL}/api/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      ```
+      `Bearer` のあとに半角スペースが1つ要ります．

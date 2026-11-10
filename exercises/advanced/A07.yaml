@@ -1,0 +1,94 @@
+id: A07
+level: advanced
+title: 負荷が足りないと見えない
+scenario: 閾値は正しいのに劣化が見えないとき，負荷の条件を見直したい
+minutes: 7
+optional: true
+type: code
+statement: |
+  ## 状況
+
+  このスクリプトは A01 の正解と同じ閾値を持っている．ところが k6 で実行すると，`/api/heavy` の閾値も含めてすべて合格する．1 VU では `/api/heavy` の順番待ちが起きず，約200ms で返るからだ．
+
+  本番では20人ほどが同時に使う．
+
+  ## やること
+
+  **閾値は変えずに，負荷のかけ方だけを変えて**，`/api/heavy` の混雑が起きるテストにしてください（同時に **10 VU 以上**）．1回の繰り返しの中身も変えなくてかまいません．
+starter: |
+  import http from 'k6/http';
+  import { check } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 1,
+    duration: '20s',
+    thresholds: {
+      http_req_duration: ['p(95)<1000'],
+      'http_req_duration{name:heavy}': ['p(95)<1000'],
+    },
+  };
+
+  export default function () {
+    for (let i = 0; i < 30; i++) {
+      const res = http.get(`${BASE_URL}/api/items`, { tags: { name: 'items' } });
+      check(res, { 'items 200': (r) => r.status === 200 });
+    }
+    const res = http.get(`${BASE_URL}/api/heavy`, { tags: { name: 'heavy' } });
+    check(res, { 'heavy 200': (r) => r.status === 200 });
+  }
+solution: |
+  import http from 'k6/http';
+  import { check } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 20,
+    duration: '20s',
+    thresholds: {
+      http_req_duration: ['p(95)<1000'],
+      'http_req_duration{name:heavy}': ['p(95)<1000'],
+    },
+  };
+
+  export default function () {
+    for (let i = 0; i < 30; i++) {
+      const res = http.get(`${BASE_URL}/api/items`, { tags: { name: 'items' } });
+      check(res, { 'items 200': (r) => r.status === 200 });
+    }
+    const res = http.get(`${BASE_URL}/api/heavy`, { tags: { name: 'heavy' } });
+    check(res, { 'heavy 200': (r) => r.status === 200 });
+  }
+judge:
+  static:
+    thresholds_unchanged: true
+    min_vus: 10
+    max_vus: 100
+    thresholds:
+      - for_path: /api/heavy
+  run:
+    exit_code: 99
+    thresholds:
+      - url_contains: /api/heavy
+        ok: false
+        min_count: 1
+hints:
+  - when: { fail: min_vus }
+    text: "1 VU では順番待ちが起きません．同時に何人いれば `/api/heavy` が混雑するでしょうか．"
+  - when: { fail: thresholds_unchanged }
+    text: "閾値は変えずに，`vus` や `stages` だけを変えよう．"
+explanation: |
+  何を合格とするか（閾値）が正しくても，負荷のかけ方（VU の数や到着の速さ）が足りなければ，劣化は現れません．1 VU では `/api/heavy` は約200ms で返りますが，20 VU では順番待ちのために数秒かかります（「k6 で実行」で確かめられます）．
+
+  負荷試験を設計するときは，「どの閾値で見るか」と同じくらい「どのくらいの負荷をかけるか」を利用文脈から決めることが大切です．
+
+  参照：https://grafana.com/docs/k6/latest/testing-guides/test-types/
+tips:
+  - title: 変えてよいのはどこ？
+    text: |
+      `thresholds` と `default` 関数は変えません．変えるのは `vus`（または `stages`）だけです．
+  - title: 答えに近いヒント
+    text: |
+      「本番では20人ほどが同時に使う」ので，`vus: 1` を `vus: 20` にします．

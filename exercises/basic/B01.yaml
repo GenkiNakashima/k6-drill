@@ -1,0 +1,87 @@
+id: B01
+level: basic
+title: 最初のスクリプト
+scenario: まず API が1回応答するかだけを確かめたい
+minutes: 4
+doc:
+  - https://grafana.com/docs/k6/latest/get-started/running-k6/
+type: code
+statement: |
+  ## 状況
+
+  練習用サーバーの `GET /api/ping` が応答するかを，k6 で1回だけ確かめたい．
+
+  ## やること
+
+  `default` 関数の中で `GET /api/ping` を1回呼んでください．
+
+  ## 書き方の型
+
+  ```
+  import http from 'k6/http';
+
+  export default function () {
+    http.get(`${BASE_URL}/api/ping`);
+  }
+  ```
+
+  - `import http from 'k6/http'`：HTTP リクエストを送るモジュール
+  - `export default function () { ... }`：k6 が繰り返し実行する **VU のコード**
+  - 接続先は定数 `BASE_URL` に入っています（`__ENV` は B09 で学びます）
+
+  書けたら「採点」を押してください（Ctrl+Enter または ⌘+Enter でも採点できます）．
+starter: |
+  import http from 'k6/http';
+
+  // 接続先は k6 run -e BASE_URL=http://localhost:8090 で渡す（詳しくは B09）
+  const BASE_URL = __ENV.BASE_URL;
+
+  export default function () {
+    // ここで GET /api/ping を呼ぶ
+
+  }
+solution: |
+  import http from 'k6/http';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export default function () {
+    http.get(`${BASE_URL}/api/ping`);
+  }
+judge:
+  static:
+    imports: [k6/http]
+    requests:
+      - method: GET
+        path: /api/ping
+        in: default
+        uses_base_url: true
+  run:
+    exit_code: 0
+    requests:
+      - url_contains: /api/ping
+        status: 200
+        min: 1
+hints:
+  - when: { fail: requests }
+    text: "`default` 関数の中で `http.get()` を呼んでいるか確かめよう．URL はバッククォートで囲むテンプレート文字列で `${BASE_URL}/api/ping` と書けます．"
+  - when: { problem: http_in_init }
+    text: "リクエストは関数の外（init 段階）ではなく，`default` 関数の `{ }` の中に書きます．"
+explanation: |
+  `options` を書かないと，k6 は1つの VU で `default` 関数を1回だけ実行します．実行すると集計表示の `http_reqs` が 1 になります．
+
+  参照：https://grafana.com/docs/k6/latest/get-started/running-k6/
+tips:
+  - title: どこに書く？
+    text: |
+      `export default function () {` と `}` のあいだ（「ここで GET /api/ping を呼ぶ」の行の下）に，1行だけ書きます．
+      関数の外に書くと，k6 はリクエストを送れません．
+  - title: 何を書く？
+    text: |
+      GET のリクエストは `http.get(URL)` で送ります．URL は「接続先 `BASE_URL`」と「パス `/api/ping`」をつなげたものです．
+  - title: 答えに近いヒント
+    text: |
+      ```
+      http.get(`${BASE_URL}/api/ping`);
+      ```
+      外側の記号は，ふつうの引用符ではなくバッククォートです（日本語キーボードでは Shift + @）．`${...}` の中に変数を書くと，その値に置きかわります．

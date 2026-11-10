@@ -1,0 +1,103 @@
+id: B11
+level: basic
+title: 結果の読み方
+minutes: 4
+doc:
+  - https://grafana.com/docs/k6/latest/using-k6/metrics/reference/
+  - https://grafana.com/docs/k6/latest/results-output/end-of-test/
+type: quiz
+statement: |
+  k6 はテストの終わりに集計表示（end-of-test summary）を出します．次の集計表示を読んで，設問に答えてください．
+
+  ```
+    █ THRESHOLDS
+
+      http_req_duration
+      ✓ 'p(95)<500' p(95)=212.4ms
+
+      http_req_failed
+      ✗ 'rate<0.01' rate=4.76%
+
+
+    █ TOTAL RESULTS
+
+      checks_total.......: 420     13.9/s
+      checks_succeeded...: 95.23%  400 out of 420
+      checks_failed......: 4.76%   20 out of 420
+
+      ✗ status is 200
+        ↳  95% — ✓ 400 / ✗ 20
+
+      HTTP
+      http_req_duration..: avg=118.3ms min=1.2ms med=104.9ms max=611.0ms p(90)=201.7ms p(95)=212.4ms
+      http_req_failed....: 4.76%  20 out of 420
+      http_reqs..........: 420    13.9/s
+
+      EXECUTION
+      iteration_duration.: avg=1.11s min=1s med=1.1s max=1.61s p(90)=1.2s p(95)=1.21s
+      iterations.........: 420    13.9/s
+      vus................: 15     min=15 max=15
+      vus_max............: 15     min=15 max=15
+  ```
+quiz:
+  - question: "`http_reqs` の `420` は何を表すか．"
+    choices:
+      - text: テスト中に送った HTTP リクエストの総数
+        correct: true
+        explain: "`http_reqs` は Counter 型で，右の `13.9/s` は1秒あたりの数です．"
+      - text: 同時に送ったリクエストの最大数
+        explain: "同時に動いた VU の数は `vus` で見ます．"
+      - text: 成功したリクエストの数
+        explain: "失敗したものも含めた総数です．失敗の割合は `http_req_failed` で見ます．"
+  - question: "`http_req_duration` の `p(95)=212.4ms` の意味はどれか．"
+    choices:
+      - text: リクエストの95% が 212.4ms 以内に返った
+        correct: true
+        explain: "95パーセンタイルです．残りの5% はこれより遅く，最も遅いものは `max=611.0ms` でした．"
+      - text: リクエストの平均が 212.4ms だった
+        explain: "平均は `avg=118.3ms` です．"
+      - text: 95件目のリクエストが 212.4ms かかった
+        explain: "件数の順番ではなく，速い順に並べたときの95% の位置の値です．"
+  - question: このテストの終了コードはどれになるか．
+    choices:
+      - text: "0"
+        explain: "THRESHOLDS の欄に ✗ が1つあります．"
+      - text: "99"
+        correct: true
+        explain: "`http_req_failed` の閾値 `rate<0.01` を満たしていない（4.76%）ので，閾値の不合格を表す 99 で終わります．"
+      - text: "107"
+        explain: "107 はスクリプトの例外で止まったときの終了コードです．"
+  - question: "`checks_succeeded` が 95.23% だった．これについて正しいものはどれか．"
+    choices:
+      - text: check が100% でないので，終了コードは必ず 99 になる
+        explain: "check は合否を決めません．`checks` に閾値を置いたときだけ合否に影響します．"
+      - text: check の約5% が失敗したが，check だけではテストは不合格にならない
+        correct: true
+        explain: "このテストが不合格なのは `http_req_failed` の閾値のためで，check のためではありません．"
+      - text: リクエストの95.23% が速かった
+        explain: "check が確かめたのは状態コードが 200 かどうかで，速さではありません．"
+  - question: "`http_req_duration` に含まれない時間はどれか．"
+    choices:
+      - text: サーバーが応答を返すまで待った時間（`http_req_waiting`）
+        explain: "`http_req_duration` は送信・待機・受信（`http_req_sending` + `http_req_waiting` + `http_req_receiving`）の合計です．"
+      - text: 応答の本文を受け取った時間（`http_req_receiving`）
+        explain: "受信の時間も含まれます．"
+      - text: "`sleep()` で休んだ時間"
+        correct: true
+        explain: "`sleep()` はリクエストの外なので含まれません．`iteration_duration` には含まれます（この例で約1秒多いのはそのため）．"
+explanation: |
+  集計表示を読むときは，次の順に見ると誤りに気づきやすくなります．
+
+  1. THRESHOLDS の欄：どの閾値が ✓ / ✗ か，実測値はいくつか
+  2. `http_reqs`：リクエストを本当に送ったか（0 なら何も測っていない）
+  3. `checks`：応答の中身が期待どおりか
+  4. `http_req_duration` の `avg`，`p(95)`，`max`：遅いリクエストがどのくらいあるか
+
+  参照：https://grafana.com/docs/k6/latest/using-k6/metrics/reference/
+tips:
+  - title: 読む順番
+    text: |
+      まず THRESHOLDS の欄で ✓ と ✗ を見て，次に `http_reqs`（送った数），`checks`，`http_req_duration` を見ます．
+  - title: 終了コード
+    text: |
+      THRESHOLDS の欄に ✗ が1つでもあれば 99，すべて ✓ なら 0 です．check の ✗ は終了コードに影響しません．

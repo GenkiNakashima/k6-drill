@@ -1,0 +1,78 @@
+id: A02
+level: advanced
+title: 測定0件の合格を直す
+scenario: 閾値が合格しているのに，本当は何も測っていない（測定0件）テストを直したい
+minutes: 8
+type: code
+statement: |
+  ## 状況
+
+  同僚が書いたこのテストは，k6 で実行すると合格する．しかし結果をよく見ると，閾値の実測値は `p(95)=0s` で，`/api/heavy` の遅さを測れていない．
+
+  ## やること
+
+  閾値（`options.thresholds`）は1文字も変えずに，この閾値が `/api/heavy` を測るように直してください．
+
+  採点では，閾値の `{ }` の条件に合うリクエストがコードにあるかを確かめます．
+starter: |
+  import http from 'k6/http';
+  import { check } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 20,
+    duration: '20s',
+    thresholds: { 'http_req_duration{name:heavy}': ['p(95)<1000'] },
+  };
+
+  export default function () {
+    const res = http.get(`${BASE_URL}/api/heavy`, { tags: { name: 'Heavy' } });
+    check(res, { 'status 200': (r) => r.status === 200 });
+  }
+solution: |
+  import http from 'k6/http';
+  import { check } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 20,
+    duration: '20s',
+    thresholds: { 'http_req_duration{name:heavy}': ['p(95)<1000'] },
+  };
+
+  export default function () {
+    const res = http.get(`${BASE_URL}/api/heavy`, { tags: { name: 'heavy' } });
+    check(res, { 'status 200': (r) => r.status === 200 });
+  }
+judge:
+  static:
+    thresholds_unchanged: true
+    thresholds:
+      - for_path: /api/heavy
+  run:
+    exit_code: 99
+    thresholds:
+      - metric: "http_req_duration{name:heavy}"
+        expr: "p(95)<1000"
+        ok: false
+        min_count: 1
+hints:
+  - when: zero_sample_threshold
+    text: "p(95)=0s は速いという意味ではない．この閾値は1件も測っていない．リクエストのタグと閾値の `{ }` の中を1文字ずつ比べよう．"
+  - when: { fail: thresholds_unchanged }
+    text: "閾値を書き換えて合わせるのではなく，リクエストに付けるタグのほうを直そう．閾値を緩めても劣化は検出できない．"
+explanation: |
+  閾値の `{ }` に書いたタグは，リクエストに付けたタグと **完全に一致したものだけ** を数えます．`Heavy` と `heavy` は別の値です．
+
+  一致するリクエストが1件もないと，k6 は値0として閾値を評価するので，`p(95)<1000` は「0 < 1000」で合格します．これが「測定0件の合格」，偽りの成功の典型です．
+
+  参照：https://grafana.com/docs/k6/latest/using-k6/thresholds/
+tips:
+  - title: 比べるところ
+    text: |
+      閾値のキー `'http_req_duration{name:heavy}'` の `{ }` の中と，リクエストの `tags: { name: 'Heavy' }` を1文字ずつ比べてみよう．
+  - title: どちらを直す？
+    text: |
+      閾値は変えてはいけないので，直すのはリクエストのタグのほうです．`'Heavy'` を，閾値と同じ文字にします（大文字と小文字は区別されます）．

@@ -1,0 +1,62 @@
+id: B06
+level: basic
+title: 閾値の書き方
+minutes: 4
+doc:
+  - https://grafana.com/docs/k6/latest/using-k6/thresholds/
+type: quiz
+statement: |
+  閾値は短い文字列で書くぶん，1文字の違いで意味が変わったり，k6 が読めなくなったりします．次の設問に答えてください．
+quiz:
+  - question: 「リクエストの95% が 300ms 未満で返る」を表す閾値として正しいものはどれか．
+    choices:
+      - text: "`http_req_duration: ['p(95)<300']`"
+        correct: true
+        explain: "パーセンタイルは `p(95)` のように括弧で書きます．時間の指標の単位はミリ秒です．"
+      - text: "`http_req_duration: ['p95<300']`"
+        explain: "`p95` という集計方法はありません．集計表示では `p(95)=...` と出ますが，閾値も `p(95)` と書きます．"
+      - text: "`http_req_duration: ['p(95)<0.3']`"
+        explain: "時間の指標の値はミリ秒なので，0.3 は 0.3ms の意味になります．"
+      - text: "`http_req_duration: ['p(95)<300ms']`"
+        explain: "閾値の数値に単位は付けません．`ms` を付けると k6 は式を読めず，エラーで止まります．"
+  - question: 閾値の値の書き方として正しいものはどれか．
+    choices:
+      - text: "`thresholds: { http_req_duration: 'p(95)<300' }`"
+        explain: "値が配列でないと，k6 は options の誤りとして止まります（終了コード 104）．"
+      - text: "`thresholds: { http_req_duration: ['p(95)<300', 'p(99)<1000'] }`"
+        correct: true
+        explain: "閾値の値は配列です．同じ指標に複数の条件を並べられ，すべてを満たしたときだけ合格です．"
+      - text: "`thresholds: [ 'http_req_duration: p(95)<300' ]`"
+        explain: "`thresholds` はオブジェクトで，キーが指標の名前，値が条件の配列です．"
+  - question: "`http_req_failed: ['rate<0.01']` の意味はどれか．"
+    choices:
+      - text: 失敗したリクエストが 0.01件 未満
+        explain: "`rate` は件数ではなく割合です．"
+      - text: 失敗したリクエストの割合が 1% 未満
+        correct: true
+        explain: "`http_req_failed` は Rate 型の指標で，`rate` は「真（失敗）だった割合」を 0〜1 で表します．"
+      - text: 1秒あたりの失敗が 0.01件 未満
+        explain: "1秒あたりの数を表すのは Counter 型の指標の `rate` です．`http_req_failed` は Rate 型なので，割合を表します．"
+  - question: "閾値 `http_req_duration: ['avg<200']` が合格した．言えることはどれか．"
+    choices:
+      - text: ほぼすべてのリクエストが 200ms 未満で返った
+        explain: "平均は，少数のとても遅いリクエストを多数の速いリクエストで薄めてしまいます．"
+      - text: 応答時間の平均が 200ms 未満だった．遅いリクエストがあったかどうかは分からない
+        correct: true
+        explain: "利用者が感じる遅さを見るには，`p(95)` や `p(99)` のようなパーセンタイルの閾値がよく使われます．"
+      - text: 失敗したリクエストはなかった
+        explain: "応答時間の閾値は失敗の有無を見ません．失敗は `http_req_failed` で見ます．"
+explanation: |
+  - パーセンタイルは `p(95)` と書く（`p95` ではない）
+  - 閾値の値は配列で書く．同じ指標に複数の条件を並べられる
+  - 時間の単位はミリ秒で，数値に単位は付けない
+  - Rate 型の `rate` は割合（0〜1），Counter 型の `rate` は1秒あたりの数
+
+  参照：https://grafana.com/docs/k6/latest/using-k6/thresholds/
+tips:
+  - title: 集計表示と同じ書き方
+    text: |
+      パーセンタイルは，集計表示の `p(95)=...` と同じく括弧付きで書きます．時間の単位はミリ秒で，数字に単位は付けません．
+  - title: 割合と回数
+    text: |
+      `http_req_failed` は「失敗したかどうか」を記録する Rate 型の指標なので，`rate` は 0〜1 の割合です．

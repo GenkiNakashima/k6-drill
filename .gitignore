@@ -1,0 +1,12 @@
+# 手元にだけ置くファイル（仕様書と開発用のメモ）
+/SPEC.md
+/CLAUDE.md
+# 配布用の実行ファイル（GitHub の Releases などで配る）
+/dist/
+# go build で作った実行ファイル
+/k6-drill
+/k6-drill.exe
+*.test
+# OS が作るファイル
+.DS_Store
+Thumbs.db

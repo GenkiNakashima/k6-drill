@@ -1,0 +1,120 @@
+id: B04
+level: basic
+title: 応答の検証
+scenario: 速さだけでなく，応答の中身が正しいかも確かめたい
+minutes: 5
+doc:
+  - https://grafana.com/docs/k6/latest/using-k6/checks/
+type: code
+statement: |
+  ## 状況
+
+  一覧 API が速く返っても，中身が誤っていたら意味がない．状態コードと中身を確かめたい．いまのコードの check は状態コードを 201 と比べていて，実行すると check がすべて失敗する．
+
+  ## やること
+
+  1. `GET /api/items` の check を，状態コードが **200** であることを確かめるように直す
+  2. 同じ応答に，品物が **10件** 返ることを確かめる check を足す（`r.json().length === 10`）
+  3. 存在しない品物 `GET /api/items/999` を呼び，状態コードが **404** であることを確かめる check を足す
+
+  ## 書き方の型
+
+  ```
+  check(res, {
+    '名前': (r) => 条件,
+    '別の名前': (r) => 条件,
+  });
+  ```
+
+  check が失敗してもテストは止まらず，終了コードも 0 のままです．check の結果で合否を決めるには，B05 で学ぶ閾値を使います．
+starter: |
+  import http from 'k6/http';
+  import { check } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 1,
+    iterations: 5,
+  };
+
+  export default function () {
+    const res = http.get(`${BASE_URL}/api/items`);
+    check(res, {
+      'status is 201': (r) => r.status === 201,
+    });
+  }
+solution: |
+  import http from 'k6/http';
+  import { check } from 'k6';
+
+  const BASE_URL = __ENV.BASE_URL;
+
+  export const options = {
+    vus: 1,
+    iterations: 5,
+  };
+
+  export default function () {
+    const res = http.get(`${BASE_URL}/api/items`);
+    check(res, {
+      'status is 200': (r) => r.status === 200,
+      '10 items': (r) => r.json().length === 10,
+    });
+
+    const missing = http.get(`${BASE_URL}/api/items/999`);
+    check(missing, {
+      'missing item is 404': (r) => r.status === 404,
+    });
+  }
+judge:
+  static:
+    must_not_contain: ['===\s*201']
+    checks:
+      min: 2
+      min_names: 3
+      status: [200, 404]
+      uses_json: true
+    requests:
+      - method: GET
+        path: /api/items
+      - method: GET
+        path: /api/items/999
+  run:
+    exit_code: 0
+    checks_rate_min: 1.0
+    min_check_names: 3
+hints:
+  - when: { fail: must_not_contain }
+    text: "`/api/items` は 200 を返します．`r.status === 201` を `r.status === 200` に直そう．"
+  - when: { fail: checks }
+    text: "check の項目（`'名前': (r) => 条件` の組）を3つにしよう．404 の確かめには，`/api/items/999` の応答に対する別の `check()` を書きます．"
+  - when: { fail: requests }
+    text: "`/api/items` と `/api/items/999` の両方を呼んでいるか確かめよう．"
+explanation: |
+  check の結果は集計表示の `checks_succeeded`（成功した割合）と，項目ごとの ✓ / ✗ で読めます．
+
+  404 を期待どおりの結果として check で確かめられることにも注目してください．ただし k6 は 400 以上の状態コードを `http_req_failed` に「失敗」として数えます．
+
+  check はテストの合否を決めません．`thresholds: { checks: ['rate>0.99'] }` のように閾値を置くと，check の成功率でテストを不合格にできます．
+
+  参照：https://grafana.com/docs/k6/latest/using-k6/checks/
+tips:
+  - title: 1つ目：数字を直す
+    text: |
+      `/api/items` は成功すると 200 を返します．`r.status === 201` の `201` を `200` に直します．名前（`'status is 201'`）も合わせて直すと読みやすくなります．
+  - title: 2つ目：件数を確かめる
+    text: |
+      `r.json()` は応答の本文（品物の配列）を返します．配列の件数は `.length` です．同じ `check(res, { ... })` の中に，項目を1行足します．
+      ```
+      '10 items': (r) => r.json().length === 10,
+      ```
+  - title: 3つ目：404 を確かめる
+    text: |
+      `/api/items/999` は別のリクエストなので，`http.get` をもう1つ書き，その応答に別の `check()` を書きます．
+      ```
+      const missing = http.get(`${BASE_URL}/api/items/999`);
+      check(missing, {
+        'missing item is 404': (r) => r.status === 404,
+      });
+      ```
